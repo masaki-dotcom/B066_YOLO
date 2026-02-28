@@ -183,47 +183,142 @@ const send = async () => {
   counts.value.pipe = data.counts.pipe ?? 0
   counts.value.muku = data.counts.muku ?? 0
   QR_code.value = data.qr || []
-
   // --------------------
-  // ★ 別ウインドウ表示
-  // --------------------
-  if (!resultWindow || resultWindow.closed) {
-    resultWindow = window.open("", "resultWindow", "width=900,height=700")
-  }
-   // ★ 重要：必ずフォーカス
-  resultWindow.focus()
+// ★ 別ウインドウ表示
+// --------------------
+if (!resultWindow || resultWindow.closed) {
+  resultWindow = window.open("", "resultWindow", "width=900,height=700")
+}
+resultWindow.focus()
+const imgSrc = "data:image/jpeg;base64," + data.image
 
-  resultWindow.document.open()
-  resultWindow.document.write(`
-      <html>
-        <head>
-          <title>
-            推論結果 | pipe:${counts.value.pipe} muku:${counts.value.muku}
-          </title>
-          <style>
-            html, body {
-              margin:0;
-              padding:0;
-              width:100%;
-              height:100%;
-              background:#000;
-              display:flex;
-              justify-content:center;
-              align-items:center;
-            }
-            img {
-              width:100%;
-              height:100%;
-              object-fit:contain;
-            }
-          </style>
-        </head>
-        <body>
-          <img src="data:image/jpeg;base64,${data.image}" />
-        </body>
-      </html>
-`)
-  resultWindow.document.close()
+const html = `
+<html>
+<head>
+<title>推論結果</title>
+<style>
+html, body {
+  margin:0;
+  padding:0;
+  width:100%;
+  height:100%;
+  background:#111;
+  overflow:hidden;
+  display:flex;
+  flex-direction:column;
+}
+#toolbar {
+  background:#222;
+  color:white;
+  padding:6px;
+  display:flex;
+  align-items:center;
+  gap:10px;
+}
+#viewer {
+  flex:1;
+  display:flex;
+  justify-content:center;
+  align-items:center;
+  overflow:hidden;
+  cursor:grab;
+}
+img {
+  width:100%;
+  height:100%;
+  object-fit:contain;
+  transition: transform 0.2s ease;
+  transform: scale(1);
+}
+button {
+  padding:4px 10px;
+  font-weight:bold;
+  cursor:pointer;
+}
+</style>
+</head>
+
+<body>
+<div id="toolbar">  
+  <span>pipe:${counts.value.pipe} / muku:${counts.value.muku}</span>
+</div>
+
+<div id="viewer">
+  <img id="img" src="${imgSrc}" />
+</div>
+</body>
+</html>
+`
+
+resultWindow.document.open()
+resultWindow.document.write(html)
+resultWindow.document.close()
+
+// ===== JSを後から安全に追加 =====
+const img = resultWindow.document.getElementById("img")
+const viewer = resultWindow.document.getElementById("viewer")
+const fullBtn = resultWindow.document.getElementById("fullBtn")
+
+let zoomScale = 1
+let posX = 0
+let posY = 0
+let isDragging = false
+let startX = 0
+let startY = 0
+
+function updateTransform() {
+  img.style.transform =
+    "translate(" + posX + "px," + posY + "px) scale(" + zoomScale + ")"
+}
+
+// ===== ホイールズーム =====
+viewer.addEventListener("wheel", (e) => {
+  e.preventDefault()
+  const delta = e.deltaY > 0 ? -0.1 : 0.1
+  zoomScale += delta
+  if (zoomScale < 1) zoomScale = 1   // ← 1未満にしない
+  if (zoomScale > 5) zoomScale = 5
+  updateTransform()
+})
+
+// ===== ドラッグ開始（拡大時のみ） =====
+viewer.addEventListener("mousedown", (e) => {
+  if (zoomScale <= 1) return   // ← 拡大してないなら移動禁止
+  isDragging = true
+  startX = e.clientX - posX
+  startY = e.clientY - posY
+  viewer.style.cursor = "grabbing"
+})
+
+// ===== ドラッグ中 =====
+viewer.addEventListener("mousemove", (e) => {
+  if (!isDragging) return
+  posX = e.clientX - startX
+  posY = e.clientY - startY
+  updateTransform()
+})
+
+// ===== ドラッグ終了 =====
+viewer.addEventListener("mouseup", () => {
+  isDragging = false
+  viewer.style.cursor = zoomScale > 1 ? "grab" : "default"
+})
+
+viewer.addEventListener("mouseleave", () => {
+  isDragging = false
+  viewer.style.cursor = zoomScale > 1 ? "grab" : "default"
+})
+
+// ===== ダブルクリックでリセット =====
+viewer.addEventListener("dblclick", () => {
+  zoomScale = 1
+  posX = 0
+  posY = 0
+  updateTransform()
+  viewer.style.cursor = "default"
+})
+
+
 }
 </script>
 
