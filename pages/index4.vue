@@ -5,8 +5,10 @@
             <label  for="fileInput" class="text-xs rounded px-3 py-1 font-bold bg-gray-400 text-blue-700 hover:text-white  cursor-pointer">
               画像選択
             </label>
-          <label><input class="ml-2" type="checkbox" v-model="Box" /> Box</label>
-          <label><input class="ml-2" type="checkbox" v-model="Label" /> Label</label>
+          <label><input class="ml-4" type="checkbox" v-model="Box" /> Box</label>
+          <label><input class="ml-4" type="checkbox" v-model="Label" /> Label</label>
+          <label><input class="ml-4" type="checkbox" v-model="Circle" /> Circle</label>
+          <label><input class="ml-4" type="checkbox" v-model="Numbers" /> Number</label>
           <button class="text-xs rounded px-3 font-bold py-0.5 bg-gray-400 text-blue-700 hover:text-white ml-4" @click="send">推論</button>
       </div>
       
@@ -43,6 +45,8 @@ const isDragging = ref(false)
 
 const Box = ref(false)
 const Label = ref(false)
+const Circle = ref(true)
+const Numbers = ref(false)
 
 const counts = ref({ pipe: 0, muku: 0 })
 
@@ -85,6 +89,39 @@ const onFile = e => {
 
   imgObj.value.src = URL.createObjectURL(imageFile.value)
 }
+// --------------------
+// 排他制御
+// --------------------
+// BoxがONになったら他をOFF
+watch(Box, (val) => {
+  if (val) {
+    Circle.value = false    
+    Numbers.value = false
+  }
+})
+// LabelがONになったら他をOFF
+watch(Label, (val) => {
+  if (val) {
+    Circle.value = false    
+    Numbers.value = false
+  }
+})
+// NumbersがONになったら他をOFF
+watch(Numbers, (val) => {
+  if (val) {
+    Box.value = false
+    Label.value = false
+    Circle.value = false
+  }
+})
+// CircleがONになったら他をOFF
+watch(Circle, (val) => {
+  if (val) {
+    Box.value = false
+    Label.value = false
+    Numbers.value = false
+  }
+})
 
 // --------------------
 // ROI選択
@@ -172,6 +209,8 @@ const send = async () => {
 
   if (Box.value) fd.append("classes[]", "Box")
   if (Label.value) fd.append("classes[]", "Label")
+  if (Circle.value) fd.append("classes[]", "Circle")
+  if (Numbers.value) fd.append("classes[]", "Numbers")
 
   const base = url_name.smart_mat_url.replace(/\/$/, "")
 

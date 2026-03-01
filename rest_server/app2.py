@@ -1,13 +1,12 @@
-from flask_restful import abort, Api, Resource
+from flask_restful import abort, Api, Resource #pip install flask-restful をインストール
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-
+import os
 import cv2
 import numpy as np
 import onnxruntime as ort
 from collections import defaultdict
 import base64
-import os
 
 # =====================
 # Flask
@@ -19,12 +18,13 @@ api = Api(app)
 # =====================
 # モデル設定
 # =====================
-MODEL_PATH = "best.onnx"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+MODEL_PATH = os.path.join(BASE_DIR, "best.onnx")
 INPUT_SIZE = 1280
 NAMES = ["pipe", "muku"]
 
 # =====================
-# ONNX Runtime（1回だけロード）
+# ONNX Runtime
 # =====================
 sess = ort.InferenceSession(
     MODEL_PATH,
@@ -36,57 +36,79 @@ print("ONNX input:", input_name)
 # =====================
 # WeChat QR（1回だけロード）
 # =====================
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+MODEL_DIR = os.path.join(BASE_DIR, "model")
+
 wechat_detector = cv2.wechat_qrcode.WeChatQRCode(
-    "model/detect.prototxt",
-    "model/detect.caffemodel",
-    "model/sr.prototxt",
-    "model/sr.caffemodel"
+    os.path.join(MODEL_DIR, "detect.prototxt"),
+    os.path.join(MODEL_DIR, "detect.caffemodel"),
+    os.path.join(MODEL_DIR, "sr.prototxt"),
+    os.path.join(MODEL_DIR, "sr.caffemodel"),
 )
 print("WeChat QR Loaded")
 
 # =====================
-# letterbox
+# Ultralytics互換 letterbox
 # =====================
-def letterbox(img, new_shape=(1280, 1280), color=(114, 114, 114)):
+def letterbox(
+    img,
+    new_shape=(1280, 1280),
+    color=(114, 114, 114),
+    scaleup=True,
+    stride=32
+):
     shape = img.shape[:2]  # (h, w)
 
-    r = min(new_shape[0] / shape[0], new_shape[1] / shape[1])
-    new_unpad = (int(shape[1] * r), int(shape[0] * r))
+    if isinstance(new_shape, int):
+        new_shape = (new_shape, new_shape)
 
+    # scale
+    r = min(new_shape[0] / shape[0], new_shape[1] / shape[1])
+    if not scaleup:
+        r = min(r, 1.0)
+
+    new_unpad = (int(round(shape[1] * r)), int(round(shape[0] * r)))
     dw = new_shape[1] - new_unpad[0]
     dh = new_shape[0] - new_unpad[1]
 
-    # ★ ここが重要（片側をfloor、片側を残り）
-    left = int(dw // 2)
-    right = int(dw - left)
-    top = int(dh // 2)
-    bottom = int(dh - top)
+    dw /= 2
+    dh /= 2
 
-    img = cv2.resize(img, new_unpad, interpolation=cv2.INTER_LINEAR)
+    if shape[::-1] != new_unpad:
+        img = cv2.resize(img, new_unpad, interpolation=cv2.INTER_LINEAR)
+
+    top, bottom = int(round(dh - 0.1)), int(round(dh + 0.1))
+    left, right = int(round(dw - 0.1)), int(round(dw + 0.1))
     img = cv2.copyMakeBorder(
         img, top, bottom, left, right,
         cv2.BORDER_CONSTANT, value=color
     )
 
-    return img, r, left, top
+    return img, r, (dw, dh)
 
 # =====================
-# 前処理
+# 前処理（Ultralytics互換）
 # =====================
 def preprocess(img):
-    img_lb, ratio, dw, dh = letterbox(img, (INPUT_SIZE, INPUT_SIZE))
+    img_lb, ratio, (dw, dh) = letterbox(img, INPUT_SIZE)
+
     img_rgb = cv2.cvtColor(img_lb, cv2.COLOR_BGR2RGB)
     img_rgb = img_rgb.astype(np.float32) / 255.0
+
     img_chw = np.transpose(img_rgb, (2, 0, 1))
     blob = np.expand_dims(img_chw, axis=0)
+
     return blob, ratio, dw, dh
 
 # =====================
-# API
+# 推論API
 # =====================
 class smart_mat_url(Resource,):
     def post(self,name):
         if name=='predict':
+            if "image" not in request.files:
+                return jsonify({"error": "no image"}), 400
+
             # Nuxtからの表示指定
             display_classes = request.form.getlist("classes[]")
 
@@ -192,58 +214,133 @@ class smart_mat_url(Resource,):
             circle_radius = max(3, int(5 * scale))
             #--------------------------------
 
+            
+            # --------------------
+            # 検出結果をリスト化
+            # --------------------
+            detections = []
+
             if len(indices) > 0:
                 for i in indices.flatten():
                     x, y, w_box, h_box = boxes[i]
                     cls = class_ids[i]
                     score = scores[i]
+                    detections.append((x, y, w_box, h_box, cls, score))
 
-                    class_name = NAMES[cls]
-                    counts[class_name] += 1
+            # --------------------
+            # 行ごとにグループ化
+            # --------------------
+            row_threshold = 30 * scale  # 行とみなす高さ許容値（調整可能）
 
-                    color = (0, 0, 255) if cls == 0 else (255, 0, 0)
+            # y座標でソート
+            detections.sort(key=lambda d: d[1])
 
-                    # --------------------
-                    # Box
-                    # --------------------
-                    if "Box" in display_classes:
-                        cv2.rectangle(
-                            img_draw,
-                            (x, y),
-                            (x + w_box, y + h_box),
-                            (0, 255, 0),
-                            box_thickness
-                        )
+            rows = []
+            current_row = []
 
-                    # --------------------
-                    # Label
-                    # --------------------
-                    if "Label" in display_classes:
-                        label = f"{class_name} {score*100:.1f}"
-                        cv2.putText(
-                            img_draw,
-                            label,
-                            (x, max(int(20 * scale), y - int(5 * scale))),
-                            cv2.FONT_HERSHEY_SIMPLEX,
-                            font_scale,
-                            (0, 255, 0),
-                            font_thickness,
-                            cv2.LINE_AA
-                        )
+            for det in detections:
+                x, y, w_box, h_box, cls, score = det
 
-                    # --------------------
-                    # Center circle
-                    # --------------------
-                    if len(display_classes) == 0:
-                        cx = x + w_box // 2
-                        cy = y + h_box // 2
-                        cv2.circle(
-                            img_draw,
-                            (cx, cy),
-                            circle_radius,
-                            color,
-                            -1
-                        )
+                if not current_row:
+                    current_row.append(det)
+                    continue
+
+                ref_y = current_row[0][1]
+
+                if abs(y - ref_y) < row_threshold:
+                    current_row.append(det)
+                else:
+                    rows.append(current_row)
+                    current_row = [det]
+
+            if current_row:
+                rows.append(current_row)
+
+            # --------------------
+            # 各行を左から並べる
+            # --------------------
+            sorted_detections = []
+            # for row in reversed(rows):   # ← ここがポイント
+            for row in rows:
+                row.sort(key=lambda d: d[0])  # x座標でソート
+                sorted_detections.extend(row)
+
+            # --------------------
+            # 描画（行順 → 左順）
+            # --------------------
+            number = 0
+
+            # for det in reversed(sorted_detections):
+            for det in sorted_detections:
+                x, y, w_box, h_box, cls, score = det
+                number += 1
+
+                class_name = NAMES[cls]
+                counts[class_name] += 1
+
+                color = (0, 0, 255) if cls == 0 else (255, 0, 0)
+
+                # --------------------
+                # Box
+                # --------------------
+                if "Box" in display_classes:
+                    cv2.rectangle(
+                        img_draw,
+                        (x, y),
+                        (x + w_box, y + h_box),
+                        (0, 255, 0),
+                        box_thickness
+                    )
+
+                # --------------------
+                # Label
+                # --------------------
+                if "Label" in display_classes:
+                    label = f"{class_name} {score*100:.1f}"
+                    cv2.putText(
+                        img_draw,
+                        label,
+                        (x, max(int(20 * scale), y - int(5 * scale))),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        font_scale,
+                        (0, 255, 0),
+                        font_thickness,
+                        cv2.LINE_AA
+                    )
+                
+
+                # --------------------
+                # Number
+                # --------------------
+                if "Numbers" in display_classes:
+                    cx = x + w_box // 2
+                    cy = y + h_box // 2
+
+                    cv2.putText(
+                        img_draw,
+                        str(number),
+                        (cx - int(10 * scale), cy + int(10 * scale)),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        font_scale * 1.2,
+                        color,
+                        font_thickness + 1,
+                        cv2.LINE_AA
+                    )
+
+                # --------------------
+                # Center circle
+                # --------------------
+                if "Circle" in display_classes:
+                    cx = x + w_box // 2
+                    cy = y + h_box // 2
+                    cv2.circle(
+                        img_draw,
+                        (cx, cy),
+                        circle_radius,
+                        color,
+                        -1
+                    )
+
 
             # =====================
             # WeChat QR検出
@@ -273,7 +370,9 @@ class smart_mat_url(Resource,):
                             font_thickness
                         )
 
-            # 画像返却
+            # --------------------
+            # 返却
+            # --------------------
             _, buf = cv2.imencode(".jpg", img_draw)
             img_base64 = base64.b64encode(buf).decode("utf-8")
 
@@ -283,11 +382,12 @@ class smart_mat_url(Resource,):
                 "qr": qr_texts
             })
 
-
 # =====================
 # main
 # =====================
 api.add_resource(smart_mat_url, '/api/smart_mat_url/<name>')
 
+
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5001, debug=True)
+   app.run(host='localhost', debug=True,port=5001)
+    # app.run(debug=True, host='0.0.0.0', port=5001)
