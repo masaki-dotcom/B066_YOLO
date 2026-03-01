@@ -207,6 +207,7 @@ html, body {
   display:flex;
   flex-direction:column;
 }
+
 #toolbar {
   background:#222;
   color:white;
@@ -215,14 +216,16 @@ html, body {
   align-items:center;
   gap:10px;
 }
+
 #viewer {
   flex:1;
   display:flex;
   justify-content:center;
   align-items:center;
   overflow:hidden;
-  cursor:grab;
+  cursor:default;
 }
+
 img {
   width:100%;
   height:100%;
@@ -230,18 +233,59 @@ img {
   transition: transform 0.2s ease;
   transform: scale(1);
 }
+
 button {
   padding:4px 10px;
   font-weight:bold;
   cursor:pointer;
 }
+
+/* ===== 印刷専用ヘッダー ===== */
+#printHeader {
+  display:none;
+}
+
+/* ===== 印刷設定 ===== */
+@media print {
+
+  #toolbar {
+    display:none;
+  }
+
+  #printHeader {
+    display:block;
+    text-align:center;
+    font-size:18px;
+    font-weight:bold;
+    margin:10px 0;
+  }
+
+  html, body {
+    background:white;
+  }
+
+  img {
+    width:100% !important;
+    height:auto !important;
+    transform:none !important;
+  }
+}
 </style>
 </head>
 
 <body>
-<div id="toolbar">  
-  <span>pipe:${counts.value.pipe} / muku:${counts.value.muku}</span>
+<div id="toolbar">
+  <button id="printBtn" style="display:none;">印刷</button>
+  <span id="countText">
+    pipe:${counts.value.pipe} / muku:${counts.value.muku}
+  </span>
 </div>
+
+<!-- 印刷時のみ表示 -->
+<div id="printHeader"> 
+  pipe:${counts.value.pipe} / muku:${counts.value.muku}
+</div>
+
 
 <div id="viewer">
   <img id="img" src="${imgSrc}" />
@@ -257,7 +301,7 @@ resultWindow.document.close()
 // ===== JSを後から安全に追加 =====
 const img = resultWindow.document.getElementById("img")
 const viewer = resultWindow.document.getElementById("viewer")
-const fullBtn = resultWindow.document.getElementById("fullBtn")
+const printBtn = resultWindow.document.getElementById("printBtn")
 
 let zoomScale = 1
 let posX = 0
@@ -271,19 +315,25 @@ function updateTransform() {
     "translate(" + posX + "px," + posY + "px) scale(" + zoomScale + ")"
 }
 
+// ===== 印刷ボタン =====
+printBtn.addEventListener("click", () => {
+  resultWindow.print()
+})
+
 // ===== ホイールズーム =====
 viewer.addEventListener("wheel", (e) => {
   e.preventDefault()
   const delta = e.deltaY > 0 ? -0.1 : 0.1
   zoomScale += delta
-  if (zoomScale < 1) zoomScale = 1   // ← 1未満にしない
+  if (zoomScale < 1) zoomScale = 1
   if (zoomScale > 5) zoomScale = 5
+  viewer.style.cursor = zoomScale > 1 ? "grab" : "default"
   updateTransform()
 })
 
 // ===== ドラッグ開始（拡大時のみ） =====
 viewer.addEventListener("mousedown", (e) => {
-  if (zoomScale <= 1) return   // ← 拡大してないなら移動禁止
+  if (zoomScale <= 1) return
   isDragging = true
   startX = e.clientX - posX
   startY = e.clientY - posY
@@ -318,6 +368,18 @@ viewer.addEventListener("dblclick", () => {
   viewer.style.cursor = "default"
 })
 
+const countText = resultWindow.document.getElementById("countText")
+
+// Ctrl + クリックで印刷ボタン表示切替
+countText.addEventListener("click", (e) => {
+  if (e.ctrlKey) {
+    if (printBtn.style.display === "none") {
+      printBtn.style.display = "inline-block"
+    } else {
+      printBtn.style.display = "none"
+    }
+  }
+})
 
 }
 </script>
