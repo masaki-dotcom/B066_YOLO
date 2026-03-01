@@ -122,7 +122,17 @@ watch(Circle, (val) => {
     Numbers.value = false
   }
 })
-
+// 全部falseなら Circle を true
+watch([Numbers, Circle, Box, Label], () => {
+  if (
+    !Numbers.value &&
+    !Circle.value &&
+    !Box.value &&
+    !Label.value
+  ) {
+    Circle.value = true
+  }
+})
 // --------------------
 // ROI選択
 // --------------------
