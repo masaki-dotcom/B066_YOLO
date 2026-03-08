@@ -132,6 +132,7 @@ class smart_mat_url(Resource,):
                 y1 = int(request.form.get("y1"))
                 x2 = int(request.form.get("x2"))
                 y2 = int(request.form.get("y2"))
+                kind = int(request.form.get("kind"))
             except:
                 return jsonify({"error": "invalid roi"}), 400
 

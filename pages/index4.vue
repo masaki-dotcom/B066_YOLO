@@ -1,5 +1,17 @@
 <template>
   <div class="contan">
+      <div style="margin-bottom:6px">
+          <label>
+          <input type="radio" value="pipe/muku" v-model="kind">
+          pipe/muku
+          </label>
+        
+          <label class="ml-4">
+          <input type="radio" value="yari" v-model="kind">
+          yari
+          </label>
+
+      </div>
       <div>
            <input id="fileInput" type="file" class="hidden" @change="onFile"/>
             <label  for="fileInput" class="text-xs rounded px-3 py-1 font-bold bg-gray-400 text-blue-700 hover:text-white  cursor-pointer">
@@ -9,6 +21,7 @@
           <label><input class="ml-4" type="checkbox" v-model="Label" /> Label</label>
           <label><input class="ml-4" type="checkbox" v-model="Circle" /> Circle</label>
           <label><input class="ml-4" type="checkbox" v-model="Numbers" /> Number</label>
+          <label><input class="ml-4" type="checkbox" v-model="MaskFill" /> Mask Fill</label>
           <button class="text-xs rounded px-3 font-bold py-0.5 bg-gray-400 text-blue-700 hover:text-white ml-4" @click="send">推論</button>
       </div>
       
@@ -29,7 +42,7 @@
 </template>
 
 <script setup>
-import { ref } from "vue"
+import { ref, watch  } from "vue"
 const url_name=UrlStore() //piniaからグローバル定数を所得
 
 const imageFile = ref(null)
@@ -47,12 +60,16 @@ const Box = ref(false)
 const Label = ref(false)
 const Circle = ref(true)
 const Numbers = ref(false)
+const MaskFill = ref(false)
 
 const counts = ref({ pipe: 0, muku: 0 })
 
 const QR_code=ref([])
 
 const MAX_SIZE = 900
+
+const kind = ref("pipe/muku")   // pipe / muku / yari
+
 
 // ★ 推論結果用ウインドウ
 let resultWindow = null
@@ -92,7 +109,7 @@ const onFile = e => {
 // --------------------
 // 排他制御
 // --------------------
-// BoxがONになったら他をOFF
+//BoxがONになったら他をOFF
 watch(Box, (val) => {
   if (val) {
     Circle.value = false    
@@ -133,6 +150,7 @@ watch([Numbers, Circle, Box, Label], () => {
     Circle.value = true
   }
 })
+
 // --------------------
 // ROI選択
 // --------------------
@@ -216,11 +234,13 @@ const send = async () => {
   fd.append("y1", sendRoi.y1)
   fd.append("x2", sendRoi.x2)
   fd.append("y2", sendRoi.y2)
+  fd.append("kind", kind.value)   // ←追加
 
   if (Box.value) fd.append("classes[]", "Box")
   if (Label.value) fd.append("classes[]", "Label")
   if (Circle.value) fd.append("classes[]", "Circle")
   if (Numbers.value) fd.append("classes[]", "Numbers")
+  if (MaskFill.value) fd.append("classes[]", "MaskFill")
 
   const base = url_name.smart_mat_url.replace(/\/$/, "")
 
