@@ -3,324 +3,323 @@ import cv2
 import base64
 import numpy as np
 from flask import Flask, request, jsonify
-from flask_restful import abort, Api, Resource
+from flask_restful import Api, Resource
 from ultralytics import YOLO
 from flask_cors import CORS
 
-# =========================
+# ========================
 # Flask
-# =========================
+# ========================
+
 app = Flask(__name__)
 CORS(app)
 api = Api(app)
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-# =========================
-# モデル
-# =========================
+# ========================
+# YOLO モデル
+# ========================
 
-model_pipe = YOLO(os.path.join(BASE_DIR, "pipe/best.pt"))
-model_yari = YOLO(os.path.join(BASE_DIR, "yari/best.pt"))
+model_pipe = YOLO(os.path.join(BASE_DIR,"pipe/best.pt"))
+model_yari = YOLO(os.path.join(BASE_DIR,"yari/best.pt"))
 
-NAMES = {
-    0: "muku",
-    1: "pipe"
-}
-
-# =========================
-# QR
-# =========================
+NAMES = {0:"muku",1:"pipe"}
 
 qr_detector = cv2.QRCodeDetector()
 
-# =========================
+
+# ========================
 # 行ソート
-# =========================
+# ========================
 
-def row_sort(centers, row_threshold=40):
+def row_sort(centers,th=40):
 
-    centers = sorted(centers, key=lambda x: x[1])
+    centers = sorted(centers,key=lambda x:x[1])
 
-    rows = []
-    current = []
-
-    last_y = None
+    rows=[]
+    cur=[]
+    last=None
 
     for c in centers:
 
-        x,y,color = c
-
-        if last_y is None:
-            current.append(c)
-            last_y = y
+        if last is None:
+            cur.append(c)
+            last=c[1]
             continue
 
-        if abs(y-last_y) < row_threshold:
-            current.append(c)
+        if abs(c[1]-last)<th:
+            cur.append(c)
         else:
-            rows.append(current)
-            current = [c]
+            rows.append(cur)
+            cur=[c]
 
-        last_y = y
+        last=c[1]
 
-    if current:
-        rows.append(current)
+    if cur:
+        rows.append(cur)
 
-    ordered = []
-
+    out=[]
     for r in rows:
-        r = sorted(r, key=lambda x: x[0])
-        ordered.extend(r)
+        r=sorted(r,key=lambda x:x[0])
+        out.extend(r)
 
-    return ordered
+    return out
 
 
-# =========================
-# 推論API
-# =========================
+# ========================
+# API
+# ========================
 
 class smart_mat_url(Resource):
 
-    def post(self, name):
-        if name=='predict':
-            print(name)
-            if "image" not in request.files:
-                return jsonify({"error": "no image"}), 400
+    def post(self,name):
 
-            file = request.files["image"]
-            kind = request.form.get("kind")
+        if name!="predict":
+            return {"error":"invalid api"}
 
-            display_classes = request.form.getlist("classes[]")
+        # ----------------
+        # 画像
+        # ----------------
 
-            roi_x = int(request.form.get("roi_x",0))
-            roi_y = int(request.form.get("roi_y",0))
-            roi_w = int(request.form.get("roi_w",0))
-            roi_h = int(request.form.get("roi_h",0))
+        if "image" not in request.files:
+            return {"error":"no image"},400
 
-            circle_radius = int(request.form.get("circle_radius",6))
-            box_thickness = int(request.form.get("box_thickness",2))
-            font_scale = float(request.form.get("font_scale",0.6))
-            font_thickness = int(request.form.get("font_thickness",2))
+        file=request.files["image"]
 
-            # =========================
-            # 画像読み込み
-            # =========================
+        img=cv2.imdecode(
+            np.frombuffer(file.read(),np.uint8),
+            cv2.IMREAD_COLOR
+        )
 
-            img = cv2.imdecode(
-                np.frombuffer(file.read(), np.uint8),
-                cv2.IMREAD_COLOR
+        orig_h,orig_w=img.shape[:2]
+
+        circle_radius = max(24, int(orig_h/200))
+
+        # ROI
+        x1=int(request.form.get("x1",0))
+        y1=int(request.form.get("y1",0))
+        x2=int(request.form.get("x2",0))
+        y2=int(request.form.get("y2",0))
+        kind = request.form.get("kind", "pipe/muku")
+
+        x1,x2=sorted([x1,x2])
+        y1,y2=sorted([y1,y2])
+
+        x1=max(0,min(x1,orig_w-1))
+        x2=max(0,min(x2,orig_w))
+        y1=max(0,min(y1,orig_h-1))
+        y2=max(0,min(y2,orig_h))
+
+        if x2<=x1 or y2<=y1:
+            roi=img
+        else:
+            roi=img[y1:y2,x1:x2]
+
+        display=request.form.getlist("classes[]")
+
+        # ---------------------
+        # YOLO
+        # ---------------------
+        print(kind)
+        print(display)
+        if kind == "yari":
+            results=model_yari(roi,conf=0.6)[0]
+        else:
+            results=model_pipe(roi,conf=0.6)[0]
+
+        img_draw=roi.copy()
+
+        centers=[]
+        counts={}
+
+        overlay=img_draw.copy()
+
+        # ========================
+        # Segmentation
+        # ========================
+
+        if results.masks is not None:
+
+            masks=results.masks.data.cpu().numpy()
+
+            for mask,cls in zip(masks,results.boxes.cls):
+
+                cls=int(cls)
+
+                color=(0,0,255) if cls==0 else (255,0,0)
+
+                mask=cv2.resize(mask,(roi.shape[1],roi.shape[0]))
+                mask_bool=mask>0.5
+
+                ys,xs=np.where(mask_bool)
+
+                if len(xs)>0:
+
+                    cx=int(xs.mean())
+                    cy=int(ys.mean())
+
+                    centers.append((cx,cy,color))
+
+                if "MaskFill" in display:
+                    overlay[mask_bool]=color
+
+        if "MaskFill" in display:
+
+            img_draw=cv2.addWeighted(
+                overlay,0.3,
+                img_draw,0.7,
+                0
             )
 
-            img_draw = img.copy()
+        # ---------------------
+        # BOX
+        # ---------------------
 
-            # =========================
-            # ROI
-            # =========================
+        for box,cls,conf in zip(
+            results.boxes.xyxy,
+            results.boxes.cls,
+            results.boxes.conf
+        ):
 
-            if roi_w > 0 and roi_h > 0:
+            x1,y1,x2,y2=map(int,box)
 
-                roi_img = img[roi_y:roi_y+roi_h, roi_x:roi_x+roi_w]
+            cls=int(cls)
 
-            else:
+            name=NAMES[cls]
 
-                roi_img = img
-                roi_x = 0
-                roi_y = 0
-                roi_h, roi_w = img.shape[:2]
+            counts[name]=counts.get(name,0)+1
 
-            # =========================
-            # モデル選択
-            # =========================
+            color=(0,0,255) if cls==0 else (255,0,0)
 
-            model = model_yari if kind == "yari" else model_pipe
+            cx=(x1+x2)//2
+            cy=(y1+y2)//2
 
-            results = model(roi_img, conf=0.6)[0]
+            if kind == "pipe/muku":
+                centers.append((cx,cy,color))
 
-            counts = {"muku":0,"pipe":0}
+            if "Box" in display:
 
-            centers = []
-
-            overlay = img_draw.copy()
-
-            # =========================
-            # Segmentation
-            # =========================
-
-            if results.masks is not None:
-                print(9999)
-
-                masks = results.masks.data.cpu().numpy()
-
-                for mask, cls in zip(masks, results.boxes.cls):
-
-                    cls_id = int(cls)
-                    color = (0,0,255) if cls_id==0 else (255,0,0)
-
-                    mask = cv2.resize(mask,(roi_w,roi_h))
-                    mask_bool = mask > 0.5
-
-                    ys,xs = np.where(mask_bool)
-
-                    if len(xs)>0:
-
-                        cx = int(xs.mean()) + roi_x
-                        cy = int(ys.mean()) + roi_y
-
-                        centers.append((cx,cy,color))
-
-                    if "MaskFill" in display_classes:
-
-                        overlay[
-                            roi_y:roi_y+roi_h,
-                            roi_x:roi_x+roi_w
-                        ][mask_bool] = color
-
-            if "MaskFill" in display_classes:
-
-                img_draw = cv2.addWeighted(
-                    overlay,
-                    0.25,
+                cv2.rectangle(
                     img_draw,
-                    0.75,
-                    0
+                    (x1,y1),
+                    (x2,y2),
+                    (0,255,0),
+                    2
                 )
 
-            # =========================
-            # Box / Label
-            # =========================
+            if "Label" in display:
 
-            number = 1
+                label=f"{name} {conf*100:.1f}"
 
-            for box, cls, conf in zip(
-                results.boxes.xyxy,
-                results.boxes.cls,
-                results.boxes.conf
-            ):
+                cv2.putText(
+                    img_draw,
+                    label,
+                    (x1,y1-5),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.6,
+                    (0,255,0),
+                    2
+                )
 
-                bx1,by1,bx2,by2 = map(int,box)
+        # ---------------------
+        # 行ソート
+        # ---------------------
 
-                bx1 += roi_x
-                bx2 += roi_x
-                by1 += roi_y
-                by2 += roi_y
+        centers=row_sort(centers)
 
-                cls_id = int(cls)
-                score = float(conf)
+        # ---------------------
+        # Numbers
+        # ---------------------
 
-                class_name = NAMES[cls_id]
-                counts[class_name]+=1
+        if "Numbers" in display:
 
-                color = (0,0,255) if cls_id==0 else (255,0,0)
+            for i,(cx,cy,color) in enumerate(centers):
 
-                cx = (bx1+bx2)//2
-                cy = (by1+by2)//2
+                cv2.putText(
+                    img_draw,
+                    str(i+1),
+                    (cx-10,cy+10),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.8,
+                    color,
+                    2
+                )
 
-                if "Box" in display_classes:
+        # ---------------------
+        # Circle
+        # ---------------------
 
-                    cv2.rectangle(
-                        img_draw,
-                        (bx1,by1),
-                        (bx2,by2),
-                        (0,255,0),
-                        box_thickness
-                    )
+        if "Circle" in display and kind == "pipe/muku":
 
-                if "Label" in display_classes:
+            for cx,cy,color in centers:
 
-                    label = f"{class_name} {score*100:.1f}"
+                cv2.circle(
+                    img_draw,
+                    (cx,cy),
+                    6,
+                    color,
+                    -1
+                )
+        elif "Circle" in display and kind == "yari":
+            for cx,cy,color in centers:
 
-                    cv2.putText(
-                        img_draw,
-                        label,
-                        (bx1,by1-5),
-                        cv2.FONT_HERSHEY_SIMPLEX,
-                        font_scale,
-                        (0,255,0),
-                        font_thickness
-                    )
-
-            # =========================
-            # 行ソート
-            # =========================
-
-            centers = row_sort(centers)
-
-            if "Numbers" in display_classes:
-
-                for i,(cx,cy,color) in enumerate(centers):
-
-                    cv2.putText(
-                        img_draw,
-                        str(i+1),
-                        (cx-10,cy+10),
-                        cv2.FONT_HERSHEY_SIMPLEX,
-                        font_scale*1.2,
-                        color,
-                        font_thickness
-                    )
-
-            # =========================
-            # Circle
-            # =========================
-
-            if "Circle" in display_classes:
-
-                for cx,cy,color in centers:
-
-                    cv2.circle(
-                        img_draw,
-                        (cx,cy),
-                        circle_radius,
-                        color,
-                        -1
-                    )
-
-            # =========================
-            # QR
-            # =========================
-
-            qr_text = ""
-
-            data, bbox, _ = qr_detector.detectAndDecode(img)
-
-            if data:
-                qr_text = data
-
-                if bbox is not None:
-
-                    bbox = bbox.astype(int)
-
-                    for i in range(len(bbox[0])):
-
-                        cv2.line(
-                            img_draw,
-                            tuple(bbox[0][i]),
-                            tuple(bbox[0][(i+1)%4]),
-                            (255,0,0),
-                            2
-                        )
-
-            # =========================
-            # 画像返却
-            # =========================
-
-            _, buffer = cv2.imencode(".jpg", img_draw)
-
-            img_base64 = base64.b64encode(buffer).decode()
-
-            return jsonify({
-                "image": img_base64,
-                "counts": counts,
-                "qr": qr_text
-            })
+                cv2.circle(
+                    img_draw,
+                    (cx,cy),
+                    circle_radius,
+                    color,
+                    -1
+                )
 
 
-# =====================
+        # ---------------------
+        # QR
+        # ---------------------
+
+        qr_text=""
+
+        data,bbox,_=qr_detector.detectAndDecode(roi)
+
+        if data:
+
+            qr_text=data
+
+        # ========================
+        # return image
+        # ========================
+
+        _,buffer=cv2.imencode(".jpg",img_draw)
+
+        img_base64=base64.b64encode(buffer).decode()
+
+        return jsonify({
+            "image":img_base64,
+            "counts":counts,
+            "qr":[qr_text] if qr_text else []
+        })
+
+
+# ========================
+# route
+# ========================
+
+api.add_resource(
+    smart_mat_url,
+    "/api/smart_mat_url/<name>"
+)
+
+
+# ========================
 # main
-# =====================
-api.add_resource(smart_mat_url, '/api/smart_mat_url/<name>')
+# ========================
 
-if __name__ == "__main__":
-   app.run(host='localhost', debug=True,port=5001)
-    # app.run(debug=True, host='0.0.0.0', port=5001)
+if __name__=="__main__":
+
+    print("YOLO server start")
+
+    app.run(
+        host="localhost",
+        port=5001,
+        debug=True
+    )

@@ -36,16 +36,16 @@ print("ONNX input:", input_name)
 # =====================
 # WeChat QR（1回だけロード）
 # =====================
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-MODEL_DIR = os.path.join(BASE_DIR, "model")
+# BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+# MODEL_DIR = os.path.join(BASE_DIR, "model")
 
-wechat_detector = cv2.wechat_qrcode.WeChatQRCode(
-    os.path.join(MODEL_DIR, "detect.prototxt"),
-    os.path.join(MODEL_DIR, "detect.caffemodel"),
-    os.path.join(MODEL_DIR, "sr.prototxt"),
-    os.path.join(MODEL_DIR, "sr.caffemodel"),
-)
-print("WeChat QR Loaded")
+# wechat_detector = cv2.wechat_qrcode.WeChatQRCode(
+#     os.path.join(MODEL_DIR, "detect.prototxt"),
+#     os.path.join(MODEL_DIR, "detect.caffemodel"),
+#     os.path.join(MODEL_DIR, "sr.prototxt"),
+#     os.path.join(MODEL_DIR, "sr.caffemodel"),
+# )
+# print("WeChat QR Loaded")
 
 # =====================
 # Ultralytics互換 letterbox
@@ -271,30 +271,30 @@ class smart_mat_url(Resource,):
             # =====================
             # WeChat QR検出
             # =====================
-            qr_texts = []
+            # qr_texts = []
 
-            decoded_info, points = wechat_detector.detectAndDecode(img_draw)
+            # decoded_info, points = wechat_detector.detectAndDecode(img_draw)
 
-            if points is not None and len(decoded_info) > 0:
-                for text, pts in zip(decoded_info, points):
-                    if text != "":
-                        qr_texts.append(text)
-                        pts = pts.astype(int)
+            # if points is not None and len(decoded_info) > 0:
+            #     for text, pts in zip(decoded_info, points):
+            #         if text != "":
+            #             qr_texts.append(text)
+            #             pts = pts.astype(int)
 
-                        for j in range(4):
-                            pt1 = tuple(pts[j])
-                            pt2 = tuple(pts[(j+1) % 4])
-                            cv2.line(img_draw, pt1, pt2, (0,255,0), font_thickness)
+            #             for j in range(4):
+            #                 pt1 = tuple(pts[j])
+            #                 pt2 = tuple(pts[(j+1) % 4])
+            #                 cv2.line(img_draw, pt1, pt2, (0,255,0), font_thickness)
 
-                        cv2.putText(
-                            img_draw,
-                            text,
-                            (pts[0][0], pts[0][1]-10),
-                            cv2.FONT_HERSHEY_SIMPLEX,
-                            font_scale,
-                            (0,255,0),
-                            font_thickness
-                        )
+            #             cv2.putText(
+            #                 img_draw,
+            #                 text,
+            #                 (pts[0][0], pts[0][1]-10),
+            #                 cv2.FONT_HERSHEY_SIMPLEX,
+            #                 font_scale,
+            #                 (0,255,0),
+            #                 font_thickness
+            #             )
 
             # --------------------
             # 返却
@@ -305,7 +305,7 @@ class smart_mat_url(Resource,):
             return jsonify({
                 "counts": counts,
                 "image": img_base64,
-                "qr": qr_texts
+                # "qr": qr_texts
             })
 
 # =====================

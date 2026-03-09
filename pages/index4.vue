@@ -140,17 +140,40 @@ watch(Circle, (val) => {
   }
 })
 // 全部falseなら Circle を true
-watch([Numbers, Circle, Box, Label], () => {
+watch([Numbers, Circle, Box, Label, MaskFill], () => {
   if (
     !Numbers.value &&
     !Circle.value &&
     !Box.value &&
-    !Label.value
+    !Label.value &&
+    !MaskFill.value
   ) {
     Circle.value = true
   }
 })
+watch(kind, (val) => {
 
+  if (val === 'pipe/muku' ) {
+
+    Circle.value = true
+    Box.value = false
+    Label.value = false
+    Numbers.value = false
+    MaskFill.value = false
+
+  }
+
+  if (val === 'yari') {
+
+    Circle.value = false
+    Box.value = false
+    Label.value = false
+    Numbers.value = false
+    MaskFill.value = true
+
+  }
+
+})
 // --------------------
 // ROI選択
 // --------------------
