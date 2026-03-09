@@ -276,14 +276,35 @@ class SmartMatAPI(Resource):
         # numbers
         # ==========================
 
+        # if "Numbers" in display:
+
+        #     for i,(cx,cy,color) in enumerate(centers):
+
+        #         cv2.putText(
+        #             img_draw,
+        #             str(i+1),
+        #             (cx-10,cy+10),
+        #             cv2.FONT_HERSHEY_SIMPLEX,
+        #             font_scale,
+        #             color,
+        #             font_th
+        #         )
+
         if "Numbers" in display:
 
             for i,(cx,cy,color) in enumerate(centers):
 
+                if kind == "yari":
+                    offset_x = -14
+                    offset_y = 14
+                else:
+                    offset_x = -12
+                    offset_y = 12
+
                 cv2.putText(
                     img_draw,
                     str(i+1),
-                    (cx-10,cy+10),
+                    (cx+offset_x, cy+offset_y),
                     cv2.FONT_HERSHEY_SIMPLEX,
                     font_scale,
                     color,
@@ -381,5 +402,5 @@ if __name__=="__main__":
     app.run(
         host="localhost",
         port=5001,
-        debug=False
+        debug=True
     )
