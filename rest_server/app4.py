@@ -28,6 +28,20 @@ NAMES = {0:"muku",1:"pipe"}
 
 qr_detector = cv2.QRCodeDetector()
 
+# =====================
+# WeChat QR（1回だけロード）
+# =====================
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+MODEL_DIR = os.path.join(BASE_DIR, "model")
+
+wechat_detector = cv2.wechat_qrcode.WeChatQRCode(
+    os.path.join(MODEL_DIR, "detect.prototxt"),
+    os.path.join(MODEL_DIR, "detect.caffemodel"),
+    os.path.join(MODEL_DIR, "sr.prototxt"),
+    os.path.join(MODEL_DIR, "sr.caffemodel"),
+)
+print("WeChat QR Loaded")
+
 
 # ========================
 # 行ソート
@@ -93,8 +107,15 @@ class smart_mat_url(Resource):
         )
 
         orig_h,orig_w=img.shape[:2]
-
-        circle_radius = max(24, int(orig_h/200))
+         # --------------------
+        # 描画準備
+        # --------------------
+        scale = max(orig_h,orig_w) / 640.0
+        circle_radius1 = max(24, int(orig_h/200))
+        font_scale = 0.6 * scale
+        font_thickness = max(1, int(2 * scale*0.4))
+        box_thickness = max(1, int(2 * scale))
+        circle_radius2 = max(3, int(5 * scale))
 
         # ROI
         x1=int(request.form.get("x1",0))
@@ -120,9 +141,7 @@ class smart_mat_url(Resource):
 
         # ---------------------
         # YOLO
-        # ---------------------
-        print(kind)
-        print(display)
+        # ---------------------       
         if kind == "yari":
             results=model_yari(roi,conf=0.6)[0]
         else:
@@ -241,7 +260,7 @@ class smart_mat_url(Resource):
                     str(i+1),
                     (cx-10,cy+10),
                     cv2.FONT_HERSHEY_SIMPLEX,
-                    0.8,
+                    font_thickness*0.4,
                     color,
                     2
                 )
@@ -257,7 +276,7 @@ class smart_mat_url(Resource):
                 cv2.circle(
                     img_draw,
                     (cx,cy),
-                    6,
+                    circle_radius2,
                     color,
                     -1
                 )
@@ -267,7 +286,7 @@ class smart_mat_url(Resource):
                 cv2.circle(
                     img_draw,
                     (cx,cy),
-                    circle_radius,
+                    circle_radius1,
                     color,
                     -1
                 )
@@ -277,13 +296,39 @@ class smart_mat_url(Resource):
         # QR
         # ---------------------
 
-        qr_text=""
+        qr_texts = []
 
-        data,bbox,_=qr_detector.detectAndDecode(roi)
+        decoded_info, points = wechat_detector.detectAndDecode(img_draw)
 
-        if data:
+        if points is not None:
 
-            qr_text=data
+            for text, pts in zip(decoded_info, points):
+
+                if text != "":
+
+                    qr_texts.append(text)
+                    pts = pts.astype(int)
+
+                    for j in range(4):
+
+                        cv2.line(
+                            img_draw,
+                            tuple(pts[j]),
+                            tuple(pts[(j+1)%4]),
+                            (0,255,0),
+                            font_thickness
+                        )
+
+                    cv2.putText(
+                        img_draw,
+                        text,
+                        (pts[0][0], pts[0][1]-10),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        font_scale,
+                        (0,255,0),
+                        font_thickness
+                    )
+
 
         # ========================
         # return image
@@ -296,7 +341,7 @@ class smart_mat_url(Resource):
         return jsonify({
             "image":img_base64,
             "counts":counts,
-            "qr":[qr_text] if qr_text else []
+            "qr":qr_texts
         })
 
 
