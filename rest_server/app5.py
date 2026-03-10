@@ -26,8 +26,8 @@ print("Loading YOLO models...")
 
 model_pipe = YOLO(os.path.join(BASE_DIR, "pipe/best.pt"))
 model_yari = YOLO(os.path.join(BASE_DIR, "yari/best.pt"))
-model_pipe.to("cuda")
-model_yari.to("cuda")
+# model_pipe.to("cuda")
+# model_yari.to("cuda")
 
 print("YOLO models loaded")
 
@@ -38,7 +38,7 @@ model_yari(dummy)
 
 print("YOLO warmup finished")
 
-NAMES = {0:"muku",1:"pipe"}
+NAMES = {0:"pipe",1:"muku"}
 
 # ==========================
 # QR detector
@@ -58,39 +58,38 @@ wechat_detector = cv2.wechat_qrcode.WeChatQRCode(
 print("WeChat QR loaded")
 
 # ==========================
-# row sort
+# row sort(行毎に数字を表示する)
 # ==========================
 
-def row_sort(centers, th=40):
+def row_sort(centers, th_ratio=0.03):
 
-    centers = sorted(centers,key=lambda x:x[1])
+    if not centers:
+        return centers
+
+    ys = [c[1] for c in centers]
+    h = max(ys) - min(ys)
+
+    th = max(10, int(h * th_ratio))
+
+    centers = sorted(centers, key=lambda x: x[1])
 
     rows=[]
-    cur=[]
-    last=None
+    cur=[centers[0]]
 
-    for c in centers:
+    for c in centers[1:]:
 
-        if last is None:
-            cur.append(c)
-            last=c[1]
-            continue
-
-        if abs(c[1]-last) < th:
+        if abs(c[1]-cur[-1][1]) < th:
             cur.append(c)
         else:
             rows.append(cur)
             cur=[c]
 
-        last=c[1]
-
-    if cur:
-        rows.append(cur)
+    rows.append(cur)
 
     out=[]
 
     for r in rows:
-        r = sorted(r,key=lambda x:x[0])
+        r=sorted(r,key=lambda x:x[0])
         out.extend(r)
 
     return out

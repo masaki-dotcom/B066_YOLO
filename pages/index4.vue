@@ -29,7 +29,7 @@
         <!-- pipe: {{ counts.pipe }}
         muku: {{ counts.muku }} -->
          {{ kind=='pipe/muku' ?   `pipe: ${counts.pipe}`:'' }}
-         {{ kind=='pipe/muku' ?   `muku: ${counts.muku}`: `yari: ${counts.muku}` }}
+         {{ kind=='pipe/muku' ?   `muku: ${counts.muku}`: `yari: ${counts.pipe}` }}
          {{ QR_code.length>0?   `品種: ${QR_code[0]}`:'' }}
       </div>
         
@@ -371,13 +371,13 @@ button {
 <div id="toolbar">
   <button id="printBtn" style="display:none;">印刷</button>
   <span id="countText">
-     ${kind.value === 'pipe/muku' ? `pipe:${counts.value.pipe} / muku:${counts.value.muku}` :`yari: ${counts.value.muku}` }
+     ${kind.value === 'pipe/muku' ? `pipe:${counts.value.pipe} / muku:${counts.value.muku}` :`yari: ${counts.value.pipe}` }
   </span>
 </div>
 
 <!-- 印刷時のみ表示 -->
 <div id="printHeader"> 
-   ${kind.value === 'pipe/muku' ? `pipe:${counts.value.pipe} / muku:${counts.value.muku}` :`yari: ${counts.value.muku}` }
+   ${kind.value === 'pipe/muku' ? `pipe:${counts.value.pipe} / muku:${counts.value.muku}` :`yari: ${counts.value.pipe}` }
 </div>
 
 
