@@ -293,22 +293,26 @@ class SmartMatAPI(Resource):
 
             for i,(cx,cy,color) in enumerate(centers):
 
-                if kind == "yari":
-                    offset_x = -14
-                    offset_y = 14
-                else:
-                    offset_x = -12
-                    offset_y = 12
+                    if kind == "yari":
+                        offset_x = -14
+                        offset_y = 14
+                        num_scale = font_scale * 0.7   # ←小さくする倍率
+                        num_th = max(1,int(font_th*0.8))
+                    else:
+                        offset_x = -12
+                        offset_y = 12
+                        num_scale = font_scale
+                        num_th = font_th
 
-                cv2.putText(
-                    img_draw,
-                    str(i+1),
-                    (cx+offset_x, cy+offset_y),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    font_scale,
-                    color,
-                    font_th
-                )
+                    cv2.putText(
+                        img_draw,
+                        str(i+1),
+                        (cx+offset_x, cy+offset_y),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        num_scale,
+                        color,
+                        num_th
+                    )
 
         # ==========================
         # circle
