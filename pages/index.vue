@@ -1,18 +1,40 @@
 <template>
   <div class="contan">
+      <div style="margin-bottom:6px">
+          <label>
+          <input type="radio" value="pipe/muku" v-model="kind">
+          pipe/muku
+          </label>
+        
+          <label class="ml-4">
+          <input type="radio" value="yari" v-model="kind">
+          yari
+          </label>
+
+          <label class="ml-4">
+          <input type="radio" value="square" v-model="kind">
+          square
+          </label>
+
+      </div>
       <div>
            <input id="fileInput" type="file" class="hidden" @change="onFile"/>
             <label  for="fileInput" class="text-xs rounded px-3 py-1 font-bold bg-gray-400 text-blue-700 hover:text-white  cursor-pointer">
               画像選択
             </label>
-          <label><input class="ml-2" type="checkbox" v-model="Box" /> Box</label>
-          <label><input class="ml-2" type="checkbox" v-model="Label" /> Label</label>
+          <label><input class="ml-4" type="checkbox" v-model="Box" /> Box</label>
+          <label><input class="ml-4" type="checkbox" v-model="Label" /> Label</label>
+          <label><input class="ml-4" type="checkbox" v-model="Circle" /> Circle</label>
+          <label><input class="ml-4" type="checkbox" v-model="Numbers" /> Number</label>
+          <label><input class="ml-4" type="checkbox" v-model="MaskFill" /> Mask Fill</label>
           <button class="text-xs rounded px-3 font-bold py-0.5 bg-gray-400 text-blue-700 hover:text-white ml-4" @click="send">推論</button>
       </div>
       
       <div class="count" style="margin-top:8px">        
-        pipe: {{ counts.pipe }}
-        muku: {{ counts.muku }}
+        <!-- pipe: {{ counts.pipe }}
+        muku: {{ counts.muku }} -->
+         {{ kind=='pipe/muku' ?   `pipe: ${counts.pipe}`:'' }}
+         {{ kind=='pipe/muku' ?   `muku: ${counts.muku}`: kind=='yari' ? `yari: ${counts.pipe}` : `square: ${counts.pipe}`}}
          {{ QR_code.length>0?   `品種: ${QR_code[0]}`:'' }}
       </div>
         
@@ -27,7 +49,7 @@
 </template>
 
 <script setup>
-import { ref } from "vue"
+import { ref, watch  } from "vue"
 const url_name=UrlStore() //piniaからグローバル定数を所得
 
 const imageFile = ref(null)
@@ -43,12 +65,18 @@ const isDragging = ref(false)
 
 const Box = ref(false)
 const Label = ref(false)
+const Circle = ref(true)
+const Numbers = ref(false)
+const MaskFill = ref(false)
 
 const counts = ref({ pipe: 0, muku: 0 })
 
 const QR_code=ref([])
 
 const MAX_SIZE = 900
+
+const kind = ref("pipe/muku")   // pipe / muku / yari
+
 
 // ★ 推論結果用ウインドウ
 let resultWindow = null
@@ -85,7 +113,74 @@ const onFile = e => {
 
   imgObj.value.src = URL.createObjectURL(imageFile.value)
 }
+// --------------------
+// 排他制御
+// --------------------
+//BoxがONになったら他をOFF
+watch(Box, (val) => {
+  if (val) {
+    Circle.value = false    
+    Numbers.value = false
+  }
+})
+// LabelがONになったら他をOFF
+watch(Label, (val) => {
+  if (val) {
+    Circle.value = false    
+    Numbers.value = false
+  }
+})
+// NumbersがONになったら他をOFF
+watch(Numbers, (val) => {
+  if (val) {
+    Box.value = false
+    Label.value = false
+    Circle.value = false
+  }
+})
+// CircleがONになったら他をOFF
+watch(Circle, (val) => {
+  if (val) {
+    Box.value = false
+    Label.value = false
+    Numbers.value = false
+  }
+})
+// 全部falseなら Circle を true
+watch([Numbers, Circle, Box, Label, MaskFill], () => {
+  if (
+    !Numbers.value &&
+    !Circle.value &&
+    !Box.value &&
+    !Label.value &&
+    !MaskFill.value 
+  ) {
+    Circle.value = true
+  }
+})
+watch(kind, (val) => {
 
+  if (val === 'pipe/muku' ) {
+
+    Circle.value = true
+    Box.value = false
+    Label.value = false
+    Numbers.value = false
+    MaskFill.value = false   
+
+  }
+
+  if (val === 'yari' ||  val === 'square') {
+
+    Circle.value = false
+    Box.value = false
+    Label.value = false
+    Numbers.value = false
+    MaskFill.value = true
+
+  }
+
+})
 // --------------------
 // ROI選択
 // --------------------
@@ -169,9 +264,13 @@ const send = async () => {
   fd.append("y1", sendRoi.y1)
   fd.append("x2", sendRoi.x2)
   fd.append("y2", sendRoi.y2)
+  fd.append("kind", kind.value)   // ←追加
 
   if (Box.value) fd.append("classes[]", "Box")
   if (Label.value) fd.append("classes[]", "Label")
+  if (Circle.value) fd.append("classes[]", "Circle")
+  if (Numbers.value) fd.append("classes[]", "Numbers")
+  if (MaskFill.value) fd.append("classes[]", "MaskFill")
 
   const base = url_name.smart_mat_url.replace(/\/$/, "")
 
@@ -183,47 +282,204 @@ const send = async () => {
   counts.value.pipe = data.counts.pipe ?? 0
   counts.value.muku = data.counts.muku ?? 0
   QR_code.value = data.qr || []
+// --------------------
+// ★ 別ウインドウ表示
+// --------------------
+if (!resultWindow || resultWindow.closed) {
+  resultWindow = window.open("", "resultWindow", "width=900,height=700")
+}
+resultWindow.focus()
+const imgSrc = "data:image/jpeg;base64," + data.image
 
-  // --------------------
-  // ★ 別ウインドウ表示
-  // --------------------
-  if (!resultWindow || resultWindow.closed) {
-    resultWindow = window.open("", "resultWindow", "width=900,height=700")
+const html = `
+<html>
+<head>
+<title>推論結果</title>
+<style>
+html, body {
+  margin:0;
+  padding:0;
+  width:100%;
+  height:100%;
+  background:#111;
+  overflow:hidden;
+  display:flex;
+  flex-direction:column;
+}
+
+#toolbar {
+  background:#222;
+  color:white;
+  padding:6px;
+  display:flex;
+  align-items:center;
+  gap:10px;
+}
+
+#viewer {
+  flex:1;
+  display:flex;
+  justify-content:center;
+  align-items:center;
+  overflow:hidden;
+  cursor:default;
+}
+
+img {
+  width:100%;
+  height:100%;
+  object-fit:contain;
+  transition: transform 0.2s ease;
+  transform: scale(1);
+}
+
+button {
+  padding:4px 10px;
+  font-weight:bold;
+  cursor:pointer;
+}
+
+/* ===== 印刷専用ヘッダー ===== */
+#printHeader {
+  display:none;
+}
+
+/* ===== 印刷設定 ===== */
+@media print {
+
+  #toolbar {
+    display:none;
   }
-   // ★ 重要：必ずフォーカス
-  resultWindow.focus()
 
-  resultWindow.document.open()
-  resultWindow.document.write(`
-      <html>
-        <head>
-          <title>
-            推論結果 | pipe:${counts.value.pipe} muku:${counts.value.muku}
-          </title>
-          <style>
-            html, body {
-              margin:0;
-              padding:0;
-              width:100%;
-              height:100%;
-              background:#000;
-              display:flex;
-              justify-content:center;
-              align-items:center;
-            }
-            img {
-              width:100%;
-              height:100%;
-              object-fit:contain;
-            }
-          </style>
-        </head>
-        <body>
-          <img src="data:image/jpeg;base64,${data.image}" />
-        </body>
-      </html>
-`)
-  resultWindow.document.close()
+  #printHeader {
+    display:block;
+    text-align:center;
+    font-size:18px;
+    font-weight:bold;
+    margin:10px 0;
+  }
+
+  html, body {
+    background:white;
+  }
+
+  img {
+    width:100% !important;
+    height:auto !important;
+    transform:none !important;
+  }
+}
+</style>
+</head>
+
+<body>
+<div id="toolbar">
+  <button id="printBtn" style="display:none;">印刷</button>
+  <span id="countText">
+     ${ kind.value === 'pipe/muku' ? `pipe:${counts.value.pipe} / muku:${counts.value.muku}`: kind.value === 'yari' ? `yari:${counts.value.pipe}` : `square:${counts.value.pipe}`}
+  </span>
+</div>
+
+<!-- 印刷時のみ表示 -->
+<div id="printHeader"> 
+    ${ kind.value === 'pipe/muku' ? `pipe:${counts.value.pipe} / muku:${counts.value.muku}`: kind.value === 'yari' ? `yari:${counts.value.pipe}` : `square:${counts.value.pipe}`}
+</div>
+
+
+<div id="viewer">
+  <img id="img" src="${imgSrc}" />
+</div>
+</body>
+</html>
+`
+
+resultWindow.document.open()
+resultWindow.document.write(html)
+resultWindow.document.close()
+
+// ===== JSを後から安全に追加 =====
+const img = resultWindow.document.getElementById("img")
+const viewer = resultWindow.document.getElementById("viewer")
+const printBtn = resultWindow.document.getElementById("printBtn")
+
+let zoomScale = 1
+let posX = 0
+let posY = 0
+let isDragging = false
+let startX = 0
+let startY = 0
+
+function updateTransform() {
+  img.style.transform =
+    "translate(" + posX + "px," + posY + "px) scale(" + zoomScale + ")"
+}
+
+// ===== 印刷ボタン =====
+printBtn.addEventListener("click", () => {
+  resultWindow.print()
+})
+
+// ===== ホイールズーム =====
+viewer.addEventListener("wheel", (e) => {
+  e.preventDefault()
+  const delta = e.deltaY > 0 ? -0.1 : 0.1
+  zoomScale += delta
+  if (zoomScale < 1) zoomScale = 1
+  if (zoomScale > 5) zoomScale = 5
+  viewer.style.cursor = zoomScale > 1 ? "grab" : "default"
+  updateTransform()
+})
+
+// ===== ドラッグ開始（拡大時のみ） =====
+viewer.addEventListener("mousedown", (e) => {
+  if (zoomScale <= 1) return
+  isDragging = true
+  startX = e.clientX - posX
+  startY = e.clientY - posY
+  viewer.style.cursor = "grabbing"
+})
+
+// ===== ドラッグ中 =====
+viewer.addEventListener("mousemove", (e) => {
+  if (!isDragging) return
+  posX = e.clientX - startX
+  posY = e.clientY - startY
+  updateTransform()
+})
+
+// ===== ドラッグ終了 =====
+viewer.addEventListener("mouseup", () => {
+  isDragging = false
+  viewer.style.cursor = zoomScale > 1 ? "grab" : "default"
+})
+
+viewer.addEventListener("mouseleave", () => {
+  isDragging = false
+  viewer.style.cursor = zoomScale > 1 ? "grab" : "default"
+})
+
+// ===== ダブルクリックでリセット =====
+viewer.addEventListener("dblclick", () => {
+  zoomScale = 1
+  posX = 0
+  posY = 0
+  updateTransform()
+  viewer.style.cursor = "default"
+})
+
+const countText = resultWindow.document.getElementById("countText")
+
+// Ctrl + クリックで印刷ボタン表示切替
+countText.addEventListener("click", (e) => {
+  if (e.ctrlKey) {
+    if (printBtn.style.display === "none") {
+      printBtn.style.display = "inline-block"
+    } else {
+      printBtn.style.display = "none"
+    }
+  }
+})
+
 }
 </script>
 

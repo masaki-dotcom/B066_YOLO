@@ -63,6 +63,7 @@ const Label = ref(false)
 const Circle = ref(true)
 const Numbers = ref(false)
 const MaskFill = ref(false)
+const square = ref(false)
 
 const counts = ref({ pipe: 0, muku: 0 })
 
@@ -142,13 +143,14 @@ watch(Circle, (val) => {
   }
 })
 // 全部falseなら Circle を true
-watch([Numbers, Circle, Box, Label, MaskFill], () => {
+watch([Numbers, Circle, Box, Label, MaskFill,square], () => {
   if (
     !Numbers.value &&
     !Circle.value &&
     !Box.value &&
     !Label.value &&
-    !MaskFill.value
+    !MaskFill.value &&
+    !square.value
   ) {
     Circle.value = true
   }
@@ -162,6 +164,7 @@ watch(kind, (val) => {
     Label.value = false
     Numbers.value = false
     MaskFill.value = false
+    square.value=false
 
   }
 
@@ -172,6 +175,7 @@ watch(kind, (val) => {
     Label.value = false
     Numbers.value = false
     MaskFill.value = true
+    square.value=false
 
   }
 
@@ -266,6 +270,7 @@ const send = async () => {
   if (Circle.value) fd.append("classes[]", "Circle")
   if (Numbers.value) fd.append("classes[]", "Numbers")
   if (MaskFill.value) fd.append("classes[]", "MaskFill")
+  if (square.value) fd.append("classes[]", "square")
 
   const base = url_name.smart_mat_url.replace(/\/$/, "")
 
