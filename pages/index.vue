@@ -272,7 +272,7 @@ const send = async () => {
   if (Numbers.value) fd.append("classes[]", "Numbers")
   if (MaskFill.value) fd.append("classes[]", "MaskFill")
 
-  const base = url_name.smart_mat_url.replace(/\/$/, "")
+  const base = url_name.yolo_server_url.replace(/\/$/, "")
 
   const data = await $fetch(`${base}/predict`, {
     method: "POST",

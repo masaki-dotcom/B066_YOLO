@@ -99,7 +99,7 @@ def row_sort(centers, th_ratio=0.03):
 # API
 # ==========================
 
-class SmartMatAPI(Resource):
+class YoloAPI(Resource):
 
     def post(self,name):
 
@@ -390,8 +390,8 @@ class SmartMatAPI(Resource):
 # ==========================
 
 api.add_resource(
-    SmartMatAPI,
-    "/api/smart_mat_url/<name>"
+    YoloAPI,
+    "/api/yolo_server_url/<name>"
 )
 
 # ==========================

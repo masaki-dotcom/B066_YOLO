@@ -275,7 +275,7 @@ class YoloAPI(Resource):
                     cx=int(xs.mean())
                     cy=int(ys.mean())
 
-                    centers.append((cx,cy,color))
+                    centers.append((cx,cy,color,cls))
 
                 if "MaskFill" in display:
                     overlay[mask_bool]=color
@@ -316,7 +316,7 @@ class YoloAPI(Resource):
             cy=(y1+y2)//2
 
             if kind=="pipe/muku":
-                centers.append((cx,cy,color))
+                centers.append((cx,cy,color,cls))
 
             if "Box" in display:
 
@@ -357,7 +357,7 @@ class YoloAPI(Resource):
 
             circle_small = max(3,int(avg_h/10))
 
-            circle_big = max(12,int(avg_h/3))
+            circle_big = max(8,int(avg_h/7))
         # ==========================
         # row sort
         # ==========================
@@ -372,40 +372,66 @@ class YoloAPI(Resource):
             centers=row_sort_grid(centers) 
 
         if "Numbers" in display:
-            for i,(cx,cy,color) in enumerate(centers):
 
-                    # ★Numbersカラー固定
-                    if kind == "yari" or kind == "square":
+            for i,(cx,cy,color,cls) in enumerate(centers):
 
-                        num_color = (255,0,0)
+                # カラーとサイズ決定
+                if kind == "yari" or kind == "square":
 
-                        offset_x = -int(avg_h/8)
-                        offset_y = int(avg_h/8)
+                    num_color = (255,0,0)
 
-                        num_scale = num_scale_base * 0.8
+                    num_scale = num_scale_base * 0.8
 
-                        num_th = max(1,int(font_th*0.8))
+                    num_th = max(1,int(font_th*0.8))
 
+                else:
+
+                    if cls==1:
+                        num_color=(255,0,0)
                     else:
+                        num_color=(0,0,255)
 
-                        num_color = (0,0,255)
+                    num_scale = num_scale_base
 
-                        offset_x = -int(avg_h/10)
-                        offset_y = int(avg_h/10)
+                    num_th = font_th
 
-                        num_scale = num_scale_base
 
-                        num_th = font_th
+                # ★文字サイズ取得（これが重要）
+                text=str(i+1)
 
-                    cv2.putText(
-                        img_draw,
-                        str(i+1),
-                        (cx+offset_x, cy+offset_y),
-                        cv2.FONT_HERSHEY_SIMPLEX,
-                        num_scale,
-                        num_color,
-                        num_th
-                    )
+                (text_w,text_h),baseline = cv2.getTextSize(
+                    text,
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    num_scale,
+                    num_th
+                )
+
+                # ★完全中央配置
+                draw_x = int(cx - text_w/2)
+                draw_y = int(cy + text_h/2)
+
+
+                # ★白縁取り（見やすくするならおすすめ）
+                # cv2.putText(
+                #     img_draw,
+                #     text,
+                #     (draw_x,draw_y),
+                #     cv2.FONT_HERSHEY_SIMPLEX,
+                #     num_scale,
+                #     (255,255,255),
+                #     num_th+1
+                # )
+
+                # 本文字
+                cv2.putText(
+                    img_draw,
+                    text,
+                    (draw_x,draw_y),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    num_scale,
+                    num_color,
+                    num_th+1
+                )
 
         # ==========================
         # circle
@@ -416,6 +442,7 @@ class YoloAPI(Resource):
 
                 if kind=="yari" or kind == "square" :
                     r = circle_small
+                    color= (255,0,0)
                 else:
                     r = circle_big 
 
@@ -499,6 +526,6 @@ if __name__=="__main__":
 
     app.run(
         host="localhost",
-        port=5001,
+        port=5005,
         debug=True
     )

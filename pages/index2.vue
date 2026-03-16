@@ -173,7 +173,7 @@ const send = async () => {
   if (Box.value) fd.append("classes[]", "Box")
   if (Label.value) fd.append("classes[]", "Label")
 
-  const base = url_name.smart_mat_url.replace(/\/$/, "")
+  const base = url_name.yolo_server_url.replace(/\/$/, "")
 
   const data = await $fetch(`${base}/predict`, {
     method: "POST",
