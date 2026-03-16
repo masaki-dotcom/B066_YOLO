@@ -438,7 +438,7 @@ class YoloAPI(Resource):
         # ==========================
 
         if "Circle" in display:
-            for cx,cy,color in centers:
+            for cx,cy,color,cls in centers:
 
                 if kind=="yari" or kind == "square" :
                     r = circle_small
