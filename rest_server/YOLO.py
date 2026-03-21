@@ -187,13 +187,35 @@ class YoloAPI(Resource):
 
         file = request.files["image"]
 
+        file_bytes = file.read()
+
         img = cv2.imdecode(
-            np.frombuffer(file.read(),np.uint8),
+            np.frombuffer(file_bytes,np.uint8),
             cv2.IMREAD_COLOR
         )
 
-        orig_h,orig_w = img.shape[:2]
+        if img is None:
+            return {"error":"image decode failed"},400   
+        # ==========================
+        # Resize（メモリ対策）解像度2000以上なら自動縮小する処理
+        # ========================== 
+        MAX_SIZE = 2000
 
+        h,w = img.shape[:2]
+
+        resize_scale = 1.0   # ★追加
+
+        if max(h,w) > MAX_SIZE:
+
+            resize_scale = MAX_SIZE / max(h,w)
+
+            img = cv2.resize(
+                img,
+                (int(w*resize_scale),int(h*resize_scale)),
+                interpolation=cv2.INTER_AREA   # ★縮小品質向上
+            )
+
+        orig_h,orig_w = img.shape[:2]
         # --------------------------
         # ROI
         # --------------------------
@@ -202,6 +224,11 @@ class YoloAPI(Resource):
         y1 = int(request.form.get("y1",0))
         x2 = int(request.form.get("x2",0))
         y2 = int(request.form.get("y2",0))
+        # ★追加（ROIも縮小）
+        x1 = int(x1 * resize_scale)
+        y1 = int(y1 * resize_scale)
+        x2 = int(x2 * resize_scale)
+        y2 = int(y2 * resize_scale)
 
         kind = request.form.get("kind","pipe/muku")
 
@@ -216,7 +243,10 @@ class YoloAPI(Resource):
         if x2<=x1 or y2<=y1:
             roi = img
         else:
-            roi = img[y1:y2,x1:x2]
+            roi = img[y1:y2,x1:x2].copy()
+
+        if roi.size == 0:
+            roi = img
 
         display = request.form.getlist("classes[]")
 
@@ -347,17 +377,16 @@ class YoloAPI(Resource):
 
         if box_heights:
 
-            avg_h = np.median(box_heights)   # ★中央値
+            avg_h = np.median(box_heights) # ★中央値
 
             font_scale = avg_h / 60
-
             font_th = max(1,int(avg_h/45))
 
             num_scale_base = avg_h / 75
 
-            circle_small = max(3,int(avg_h/10))
-
-            circle_big = max(8,int(avg_h/7))
+        # ★circleはROI基準に変更（ここ重要）
+        circle_small = max(3,int(min(roi_w,roi_h)/80))
+        circle_big   = max(3,int(min(roi_w,roi_h)/80))
         # ==========================
         # row sort
         # ==========================
